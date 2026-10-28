@@ -44,11 +44,18 @@ export const useTxMonitor = (): void => {
    * Keying the effect on the *number* of pending txs instead silently skipped a tx whenever the
    * count stayed the same while its status changed: an entry that already existed for this txId
    * (SIGNING, from `SIGNATURE_PROPOSED` on the sign-then-execute path, or a leftover rehydrated from
-   * the persisted slice) was merely replaced by the PROCESSING one, and a sped up tx replaced its
+   * the persisted slice) was merely replaced by a PROCESSING one, and a sped up tx replaced its
    * own entry with a new hash. In both cases the tx was never watched, so its receipt was never read.
    */
-  const monitorKey = JSON.stringify(
-    pendingTxEntriesOnChain.map(([txId, pendingTx]) => [txId, getMonitorTarget(pendingTx)]),
+  const monitorKey = useMemo(
+    () =>
+      pendingTxEntriesOnChain
+        .map(([txId, pendingTx]) => {
+          const target = getMonitorTarget(pendingTx)
+          return `${txId}:${target?.type ?? 'none'}:${target?.id ?? 'none'}`
+        })
+        .join('|'),
+    [pendingTxEntriesOnChain],
   )
 
   // Monitor pending transaction mining/validating progress
@@ -117,8 +124,16 @@ const useTxPendingStatuses = (): void => {
   const { safe, safeAddress } = useSafeInfo()
   const { chainId } = safe
   const txHistory = useTxHistory()
-  const historicalTxs = useMemo(() => {
-    return txHistory.page?.results?.filter(isTransactionListItem) || []
+  const historicalTxIds = useMemo(() => {
+    const ids = new Set<string>()
+
+    for (const txItem of txHistory.page?.results ?? []) {
+      if (isTransactionListItem(txItem)) {
+        ids.add(txItem.transaction.id)
+      }
+    }
+
+    return ids
   }, [txHistory.page?.results])
 
   useTxMonitor()
@@ -131,13 +146,7 @@ const useTxPendingStatuses = (): void => {
       const nonce = 'nonce' in detail ? detail.nonce : undefined
 
       if (!txId || nonce === undefined) return
-
-      // If we have future issues with statuses, we should refactor `useTxPendingStatuses`
-      // @see https://github.com/safe-global/safe-wallet-web/issues/1754
-      const isIndexed = historicalTxs.some((tx) => tx.transaction.id === txId)
-      if (isIndexed) {
-        return
-      }
+      if (historicalTxIds.has(txId)) return
 
       // Update pendingTx
       dispatch(
@@ -158,13 +167,7 @@ const useTxPendingStatuses = (): void => {
       const nonce = 'nonce' in detail ? detail.nonce : undefined
 
       if (!txId || nonce === undefined) return
-
-      // If we have future issues with statuses, we should refactor `useTxPendingStatuses`
-      // @see https://github.com/safe-global/safe-wallet-web/issues/1754
-      const isIndexed = historicalTxs.some((tx) => tx.transaction.id === txId)
-      if (isIndexed) {
-        return
-      }
+      if (historicalTxIds.has(txId)) return
 
       const pendingTx: PendingProcessingTx & { txId: string } =
         detail.txType === 'Custom'
@@ -204,13 +207,7 @@ const useTxPendingStatuses = (): void => {
       const nonce = 'nonce' in detail ? detail.nonce : undefined
 
       if (!txId || nonce === undefined) return
-
-      // If we have future issues with statuses, we should refactor `useTxPendingStatuses`
-      // @see https://github.com/safe-global/safe-wallet-web/issues/1754
-      const isIndexed = historicalTxs.some((tx) => tx.transaction.id === txId)
-      if (isIndexed) {
-        return
-      }
+      if (historicalTxIds.has(txId)) return
 
       // Update pendingTx
       dispatch(
@@ -230,13 +227,7 @@ const useTxPendingStatuses = (): void => {
       const nonce = 'nonce' in detail ? detail.nonce : undefined
 
       if (!txId || nonce === undefined) return
-
-      // If we have future issues with statuses, we should refactor `useTxPendingStatuses`
-      // @see https://github.com/safe-global/safe-wallet-web/issues/1754
-      const isIndexed = historicalTxs.some((tx) => tx.transaction.id === txId)
-      if (isIndexed) {
-        return
-      }
+      if (historicalTxIds.has(txId)) return
 
       // Update pendingTx
       dispatch(
@@ -256,13 +247,7 @@ const useTxPendingStatuses = (): void => {
       const nonce = 'nonce' in detail ? detail.nonce : undefined
 
       if (!txId || nonce === undefined) return
-
-      // If we have future issues with statuses, we should refactor `useTxPendingStatuses`
-      // @see https://github.com/safe-global/safe-wallet-web/issues/1754
-      const isIndexed = historicalTxs.some((tx) => tx.transaction.id === txId)
-      if (isIndexed) {
-        return
-      }
+      if (historicalTxIds.has(txId)) return
 
       // Update pendingTx
       dispatch(
@@ -282,13 +267,7 @@ const useTxPendingStatuses = (): void => {
       const nonce = detail.nonce
 
       if (!txId || nonce === undefined) return
-
-      // If we have future issues with statuses, we should refactor `useTxPendingStatuses`
-      // @see https://github.com/safe-global/safe-wallet-web/issues/1754
-      const isIndexed = historicalTxs.some((tx) => tx.transaction.id === txId)
-      if (isIndexed) {
-        return
-      }
+      if (historicalTxIds.has(txId)) return
 
       dispatch(
         setPendingTx({
@@ -333,7 +312,7 @@ const useTxPendingStatuses = (): void => {
     return () => {
       unsubFns.forEach((unsub) => unsub())
     }
-  }, [dispatch, chainId, safeAddress, historicalTxs])
+  }, [dispatch, chainId, safeAddress, historicalTxIds])
 }
 
 export default useTxPendingStatuses
